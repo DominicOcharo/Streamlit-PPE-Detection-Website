@@ -5,7 +5,7 @@ import cv2
 import time
 
 # Replace the relative path to your weight file
-model_path = r'C:\Users\Dell Latitude E6410\Documents\python_projects\gear_results\best.pt'
+model_path = 'weights/best.pt'
 
 # Setting page layout
 st.set_page_config(
