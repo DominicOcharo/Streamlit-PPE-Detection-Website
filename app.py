@@ -1,7 +1,9 @@
-import PIL
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import av
 from ultralytics import YOLO
 import cv2
+import numpy as np
 import time
 
 # Replace the relative path to your weight file
@@ -36,62 +38,29 @@ col1, col2 = st.columns([1, 2])
 # Initialize requirements list to store detected objects
 requirements = []
 model = YOLO(model_path)
-# Function to perform real-time detection
-def real_time_detection():
-    cap = cv2.VideoCapture(0)  # Open webcam
-    model = YOLO(model_path)    # Load YOLO model
 
-    while cap.isOpened():
-        ret, frame = cap.read()  # Read frame from webcam
-        if ret:
-            res = model.predict(frame, conf=confidence)  # Perform object detection
-            boxes = res[0].boxes   # Get bounding boxes
-            for box in boxes:
-                class_id = res[0].names[box.cls[0].item()]  # Get class name
-                requirements.append(class_id)  # Append class name to requirements
-                cords = box.xyxy[0].tolist()  # Get coordinates
-                cords = [round(x) for x in cords]
-                conf = round(box.conf[0].item(), 2)  # Get confidence score
+class VideoTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.model = YOLO(model_path)
+        self.confidence = confidence
 
-                # Draw bounding box with class label on the frame
-                label = f"{class_id} {conf:.2f}"
-                cv2.rectangle(frame, (cords[0], cords[1]), (cords[2], cords[3]), (255, 0, 0), 2)
-                cv2.putText(frame, label, (cords[0], cords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    def transform(self, frame):
+        image = frame.to_ndarray(format="bgr24")
 
-            st.image(frame, caption='Real-time Detection', use_column_width=True)  # Display real-time detection frame
+        res = self.model.predict(image, conf=self.confidence)
+        boxes = res[0].boxes
+        for box in boxes:
+            class_id = res[0].names[box.cls[0].item()]
+            requirements.append(class_id)
+            cords = box.xyxy[0].tolist()
+            cords = [round(x) for x in cords]
+            conf = round(box.conf[0].item(), 2)
 
-            # Check if "Person" is detected in requirements
-            if "Person" in requirements:
-                unique_requirements = set(requirements)
-                prohibited_items = {item for item in unique_requirements if item.lower().startswith("no")}
-                accepted_items = unique_requirements - prohibited_items
+            label = f"{class_id} {conf:.2f}"
+            cv2.rectangle(image, (cords[0], cords[1]), (cords[2], cords[3]), (255, 0, 0), 2)
+            cv2.putText(image, label, (cords[0], cords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-                prohibited_percentage = (len(prohibited_items) / 5) * 100
-                accepted_percentage = (len(accepted_items) / 5) * 100
-
-                st.subheader("Detection Results:")
-                st.write("Prohibited Items:", prohibited_items)
-                st.write("Accepted Items:", accepted_items)
-                st.write("Prohibited Percentage:", prohibited_percentage)
-                st.write("Accepted Percentage:", accepted_percentage)
-
-                if prohibited_percentage >= 50 or accepted_percentage <= 80:
-                    st.error("Access Denied!")
-                else:
-                    st.success("Access Granted!")
-                    st.write("Detected Objects:", requirements)
-                    st.write("Number of Detected Objects:", len(requirements))
-            else:
-                st.warning("No Person Detected")
-                st.write("Detected Objects:", requirements)
-
-            if st.button('Stop Detection', key=f'stop_detection_{time.time()}'):  # Button to stop real-time detection
-                break
-
-        time.sleep(0.1)  # Add a delay of 100 milliseconds
-
-    cap.release()  # Release webcam
-    cv2.destroyAllWindows()  # Close OpenCV windows
+        return av.VideoFrame.from_ndarray(image, format="bgr24")
 
 # Adding image to the first column if image is uploaded
 with col1:
@@ -148,7 +117,5 @@ else:
     st.warning("No Person Detected")
     st.write("Detected Objects:", requirements)
 
-
 if st.sidebar.button('Real-time Detection', key='real_time_detection'):
-    real_time_detection()
-
+    webrtc_streamer(key="example", video_transformer_factory=VideoTransformer)
