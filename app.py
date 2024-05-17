@@ -39,10 +39,10 @@ col1, col2 = st.columns([1, 2])
 requirements = []
 model = YOLO(model_path)
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.model = YOLO(model_path)
-        self.confidence = confidence
+class MyVideoTransformer(VideoTransformerBase):
+    def __init__(self, conf, model):
+        self.model = model
+        self.confidence = conf
 
     def transform(self, frame):
         image = frame.to_ndarray(format="bgr24")
@@ -61,6 +61,26 @@ class VideoTransformer(VideoTransformerBase):
             cv2.putText(image, label, (cords[0], cords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
+
+def play_webcam(conf, model):
+    """
+    Plays a webcam stream. Detects Objects in real-time using the YOLO object detection model.
+
+    Returns:
+        None
+
+    Raises:
+        None
+    """
+    st.write("---")
+    st.title("Webcam Object Detection")
+
+    webrtc_streamer(
+        key="example",
+        video_processor_factory=lambda: MyVideoTransformer(conf, model),
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        media_stream_constraints={"video": True, "audio": False},
+    )
 
 # Adding image to the first column if image is uploaded
 with col1:
@@ -116,4 +136,4 @@ else:
     st.write("Detected Objects:", requirements)
 
 if st.sidebar.button('Real-time Detection', key='real_time_detection'):
-    webrtc_streamer(key="example", video_transformer_factory=VideoTransformer)
+    play_webcam(confidence, model)
