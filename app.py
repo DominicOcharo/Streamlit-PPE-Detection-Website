@@ -1,25 +1,23 @@
+import PIL
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 from ultralytics import YOLO
 import cv2
-import numpy as np
-import av
-from PIL import Image
+import time
 
 # Replace the relative path to your weight file
-model_path = 'weights/best.pt'
+model_path = r'C:\Users\Dell Latitude E6410\Documents\python_projects\gear_results\best.pt'
 
 # Setting page layout
 st.set_page_config(
     page_title="PPE Detection",  # Setting page title
-    page_icon="🤖",  # Setting page icon
-    layout="wide",  # Setting layout to wide
-    initial_sidebar_state="expanded",  # Expanding sidebar by default
+    page_icon="🤖",     # Setting page icon
+    layout="wide",      # Setting layout to wide
+    initial_sidebar_state="expanded",    # Expanding sidebar by default
 )
 
 # Creating sidebar
 with st.sidebar:
-    st.markdown("# Image Config")  # Adding header to sidebar
+    st.markdown("# Image Config")     # Adding header to sidebar
     # Adding file uploader to sidebar for selecting images
     source_img = st.file_uploader(
         "Upload an image...", type=("jpg", "jpeg", "png", 'bmp', 'webp'))
@@ -38,57 +36,72 @@ col1, col2 = st.columns([1, 2])
 # Initialize requirements list to store detected objects
 requirements = []
 model = YOLO(model_path)
+# Function to perform real-time detection
+def real_time_detection():
+    cap = cv2.VideoCapture(0)  # Open webcam
+    model = YOLO(model_path)    # Load YOLO model
 
-class MyVideoTransformer(VideoTransformerBase):
-    def __init__(self, conf, model):
-        self.model = model
-        self.confidence = conf
+    while cap.isOpened():
+        ret, frame = cap.read()  # Read frame from webcam
+        if ret:
+            res = model.predict(frame, conf=confidence)  # Perform object detection
+            boxes = res[0].boxes   # Get bounding boxes
+            for box in boxes:
+                class_id = res[0].names[box.cls[0].item()]  # Get class name
+                requirements.append(class_id)  # Append class name to requirements
+                cords = box.xyxy[0].tolist()  # Get coordinates
+                cords = [round(x) for x in cords]
+                conf = round(box.conf[0].item(), 2)  # Get confidence score
 
-    def transform(self, frame):
-        image = frame.to_ndarray(format="bgr24")
+                # Draw bounding box with class label on the frame
+                label = f"{class_id} {conf:.2f}"
+                cv2.rectangle(frame, (cords[0], cords[1]), (cords[2], cords[3]), (255, 0, 0), 2)
+                cv2.putText(frame, label, (cords[0], cords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-        res = self.model.predict(image, conf=self.confidence)
-        boxes = res[0].boxes
-        for box in boxes:
-            class_id = res[0].names[box.cls[0].item()]
-            requirements.append(class_id)
-            cords = box.xyxy[0].tolist()
-            cords = [round(x) for x in cords]
-            conf = round(box.conf[0].item(), 2)
+            st.image(frame, caption='Real-time Detection', use_column_width=True)  # Display real-time detection frame
 
-            label = f"{class_id} {conf:.2f}"
-            cv2.rectangle(image, (cords[0], cords[1]), (cords[2], cords[3]), (255, 0, 0), 2)
-            cv2.putText(image, label, (cords[0], cords[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+            # Check if "Person" is detected in requirements
+            if "Person" in requirements:
+                unique_requirements = set(requirements)
+                prohibited_items = {item for item in unique_requirements if item.lower().startswith("no")}
+                accepted_items = unique_requirements - prohibited_items
 
-        return av.VideoFrame.from_ndarray(image, format="bgr24")
+                prohibited_percentage = (len(prohibited_items) / 5) * 100
+                accepted_percentage = (len(accepted_items) / 5) * 100
 
-def play_webcam(conf, model):
-    """
-    Plays a webcam stream. Detects Objects in real-time using the YOLO object detection model.
+                st.subheader("Detection Results:")
+                st.write("Prohibited Items:", prohibited_items)
+                st.write("Accepted Items:", accepted_items)
+                st.write("Prohibited Percentage:", prohibited_percentage)
+                st.write("Accepted Percentage:", accepted_percentage)
 
-    Returns:
-        None
+                if prohibited_percentage >= 50 or accepted_percentage <= 80:
+                    st.error("Access Denied!")
+                else:
+                    st.success("Access Granted!")
+                    st.write("Detected Objects:", requirements)
+                    st.write("Number of Detected Objects:", len(requirements))
+            else:
+                st.warning("No Person Detected")
+                st.write("Detected Objects:", requirements)
 
-    Raises:
-        None
-    """
-    st.write("---")
-    st.title("Webcam Object Detection")
+            if st.button('Stop Detection', key=f'stop_detection_{time.time()}'):  # Button to stop real-time detection
+                break
 
-    webrtc_streamer(
-        key="example",
-        video_processor_factory=lambda: MyVideoTransformer(conf, model),
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"video": True, "audio": False},
-    )
+        time.sleep(0.1)  # Add a delay of 100 milliseconds
+
+    cap.release()  # Release webcam
+    cv2.destroyAllWindows()  # Close OpenCV windows
 
 # Adding image to the first column if image is uploaded
 with col1:
     if source_img:
         # Opening the uploaded image
-        uploaded_image = Image.open(source_img)
+        uploaded_image = PIL.Image.open(source_img)
         # Adding the uploaded image to the page with a caption
-        st.image(source_img, caption="Uploaded Image", use_column_width=True)
+        st.image(source_img,
+                 caption="Uploaded Image",
+                 use_column_width=True)
 
 if st.sidebar.button('Detect Objects'):
     res = model.predict(uploaded_image, conf=confidence)
@@ -135,5 +148,7 @@ else:
     st.warning("No Person Detected")
     st.write("Detected Objects:", requirements)
 
+
 if st.sidebar.button('Real-time Detection', key='real_time_detection'):
-    play_webcam(confidence, model)
+    real_time_detection()
+
