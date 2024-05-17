@@ -1,10 +1,10 @@
 import streamlit as st
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import time
+import av
+from PIL import Image
 
 # Replace the relative path to your weight file
 model_path = 'weights/best.pt'
@@ -12,14 +12,14 @@ model_path = 'weights/best.pt'
 # Setting page layout
 st.set_page_config(
     page_title="PPE Detection",  # Setting page title
-    page_icon="🤖",     # Setting page icon
-    layout="wide",      # Setting layout to wide
-    initial_sidebar_state="expanded",    # Expanding sidebar by default
+    page_icon="🤖",  # Setting page icon
+    layout="wide",  # Setting layout to wide
+    initial_sidebar_state="expanded",  # Expanding sidebar by default
 )
 
 # Creating sidebar
 with st.sidebar:
-    st.markdown("# Image Config")     # Adding header to sidebar
+    st.markdown("# Image Config")  # Adding header to sidebar
     # Adding file uploader to sidebar for selecting images
     source_img = st.file_uploader(
         "Upload an image...", type=("jpg", "jpeg", "png", 'bmp', 'webp'))
@@ -66,11 +66,9 @@ class VideoTransformer(VideoTransformerBase):
 with col1:
     if source_img:
         # Opening the uploaded image
-        uploaded_image = PIL.Image.open(source_img)
+        uploaded_image = Image.open(source_img)
         # Adding the uploaded image to the page with a caption
-        st.image(source_img,
-                 caption="Uploaded Image",
-                 use_column_width=True)
+        st.image(source_img, caption="Uploaded Image", use_column_width=True)
 
 if st.sidebar.button('Detect Objects'):
     res = model.predict(uploaded_image, conf=confidence)
